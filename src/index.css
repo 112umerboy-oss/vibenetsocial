@@ -1,0 +1,54 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;0,900;1,700;1,900&display=swap');
+@import "tailwindcss";
+
+:root {
+  --vibe-black: #050505;
+  --vibe-neon: #D4AF37;
+  --vibe-gray: #E0E0E0;
+  --vibe-border: rgba(212, 175, 55, 0.1);
+  --vibe-card: #0F0F0F;
+  --vibe-muted: #737373;
+  --vibe-pure: #020202;
+  --vibe-text-contrast: #ffffff;
+}
+
+.light-mode {
+  --vibe-black: #EAE3D9;
+  --vibe-neon: #8B6E3F;
+  --vibe-gray: #1A1A1A;
+  --vibe-border: rgba(139, 110, 63, 0.1);
+  --vibe-card: #F5F1EA;
+  --vibe-muted: #6B5E4C;
+  --vibe-pure: #FDFBF7;
+  --vibe-text-contrast: #1C1917;
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Playfair Display", serif;
+  
+  --color-vibe-black: var(--vibe-black);
+  --color-vibe-neon: var(--vibe-neon);
+  --color-vibe-gray: var(--vibe-gray);
+  --color-vibe-border: var(--vibe-border);
+  --color-vibe-card: var(--vibe-card);
+  --color-vibe-muted: var(--vibe-muted);
+  --color-vibe-pure: var(--vibe-pure);
+  --color-vibe-contrast: var(--vibe-text-contrast);
+}
+
+@layer base {
+  body {
+    @apply bg-vibe-pure text-vibe-contrast font-sans selection:bg-vibe-neon selection:text-black;
+  }
+}
+
+@layer components {
+  .vibe-glass {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10;
+  }
+
+  .vibe-card-radius {
+    @apply rounded-[40px] rounded-bl-none;
+  }
+}

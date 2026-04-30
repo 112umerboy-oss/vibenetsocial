@@ -1,0 +1,13 @@
+{
+  "name": "VibeNet Social",
+  "description": "The elite social media layer where AI upgrades your presence. Post, vibe, and synchronize with AI-enhanced content, real-time feeds, and premium engagement. Featuring advanced Identity Configuration and Profile Parameter synchronization.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "AI-powered content generation",
+    "Social-first design",
+    "Real-time curation",
+    "Social Synchronization"
+  ]
+}

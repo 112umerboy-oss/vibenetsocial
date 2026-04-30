@@ -1,0 +1,366 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Public and private user data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "bio": { "type": "string" },
+        "streak": { "type": "number" },
+        "vibeScore": { "type": "number" },
+        "rank": { "type": "number" },
+        "totalPosts": { "type": "number" },
+        "dominantMood": { "type": "string" },
+        "aestheticDNA": { "type": "array", "items": { "type": "string" } },
+        "totalResonance": { "type": "number" },
+        "lastActiveAt": { "type": "string", "format": "date-time" },
+        "isPro": { "type": "boolean" },
+        "proExpiresAt": { "type": "string", "format": "date-time" },
+        "hasInsurance": { "type": "boolean" },
+        "insuranceStatus": { "type": "string", "enum": ["active", "expired", "claimed"] },
+        "insuranceRenewalDate": { "type": "string", "format": "date-time" },
+        "dailyAiUsage": {
+          "type": "object",
+          "properties": {
+            "count": { "type": "number" },
+            "lastResetDate": { "type": "string" }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "createdAt"]
+    },
+    "Post": {
+      "title": "Social Post",
+      "description": "Media post with caption and interaction counts",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "mediaType": { "type": "string", "enum": ["image", "video"] },
+        "caption": { "type": "string" },
+        "mood": { "type": "string", "enum": ["hype", "chill", "creative", "deep", "raw"] },
+        "likesCount": { "type": "number" },
+        "dislikesCount": { "type": "number" },
+        "isAnonymous": { "type": "boolean" },
+        "isScheduled": { "type": "boolean" },
+        "scheduledAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorId", "caption", "createdAt"]
+    },
+    "Battle": {
+      "title": "Vibe Battle",
+      "description": "A duel between two posts",
+      "type": "object",
+      "properties": {
+        "post1Id": { "type": "string" },
+        "post2Id": { "type": "string" },
+        "votes1": { "type": "number" },
+        "votes2": { "type": "number" },
+        "voters": { "type": "array", "items": { "type": "string" } },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "endsAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["active", "finished"] },
+        "winnerId": { "type": "string" }
+      },
+      "required": ["post1Id", "post2Id", "startedAt", "endsAt", "status"]
+    },
+    "Prediction": {
+      "title": "Prediction",
+      "description": "User predictions for viral trends",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "prediction": { "type": "string" },
+        "week": { "type": "string" },
+        "isCorrect": { "type": "boolean" },
+        "pointsAwarded": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "prediction", "week", "createdAt"]
+    },
+    "RoomMessage": {
+      "title": "Room Message",
+      "description": "Live chat message in a room",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorId", "text", "createdAt"]
+    },
+    "Comment": {
+      "title": "Post Comment",
+      "description": "User comment on a post",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string" },
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["postId", "authorId", "text", "createdAt"]
+    },
+    "Like": {
+      "title": "Post Like",
+      "description": "User like on a post",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["postId", "userId"]
+    },
+    "Dislike": {
+      "title": "Post Dislike",
+      "description": "User dislike on a post",
+      "type": "object",
+      "properties": {
+        "postId": { "type": "string" },
+        "userId": { "type": "string" }
+      },
+      "required": ["postId", "userId"]
+    },
+    "Notification": {
+      "title": "User Notification",
+      "description": "Activity alert for a user",
+      "type": "object",
+      "properties": {
+        "recipientId": { "type": "string" },
+        "type": { "type": "string", "enum": ["like", "comment", "streak", "follow", "friend_request", "match", "battle_result", "rank_change", "mention"] },
+        "postId": { "type": "string" },
+        "message": { "type": "string" },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["recipientId", "type", "message", "isRead", "createdAt"]
+    },
+    "Room": {
+      "title": "Vibe Room",
+      "description": "Mood-based community room",
+      "type": "object",
+      "properties": {
+        "mood": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "activeCount": { "type": "integer" }
+      },
+      "required": ["mood", "name", "activeCount"]
+    },
+    "Follow": {
+      "title": "User Follow",
+      "description": "One-way relationship between users",
+      "type": "object",
+      "properties": {
+        "followerId": { "type": "string" },
+        "followedId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["followerId", "followedId", "createdAt"]
+    },
+    "Friend": {
+      "title": "User Friend",
+      "description": "Two-way relationship between users",
+      "type": "object",
+      "properties": {
+        "uids": { "type": "array", "items": { "type": "string" } },
+        "status": { "type": "string", "enum": ["pending", "accepted"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uids", "status", "createdAt"]
+    },
+    "UserStat": {
+      "title": "User Periodic Stats",
+      "description": "Tracks fire/resonance for competition periods",
+      "type": "object",
+      "properties": {
+        "period": { "type": "string" },
+        "type": { "type": "string", "enum": ["week", "month"] },
+        "resonance": { "type": "number" },
+        "userId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["period", "type", "resonance", "userId"]
+    },
+    "Story": {
+      "title": "Vibe Story",
+      "description": "Short-lived media story that expires after 24 hours",
+      "type": "object",
+      "properties": {
+        "authorId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorPhoto": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "mediaType": { "type": "string", "enum": ["image", "video"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "expiresAt": { "type": "string", "format": "date-time" },
+        "viewedBy": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["authorId", "authorName", "mediaUrl", "createdAt", "expiresAt"]
+    },
+    "Conversation": {
+      "title": "Direct Conversation",
+      "description": "Private chat between two users",
+      "type": "object",
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "lastMessageAt": { "type": "string", "format": "date-time" },
+        "unreadCount": { "type": "object" },
+        "participantData": { "type": "object" }
+      },
+      "required": ["participants", "lastMessage", "lastMessageAt", "unreadCount"]
+    },
+    "Message": {
+      "title": "Direct Message",
+      "description": "Single private message within a conversation",
+      "type": "object",
+      "properties": {
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "read": { "type": "boolean" }
+      },
+      "required": ["senderId", "text", "createdAt", "read"]
+    },
+    "Purchase": {
+      "title": "Marketplace Purchase",
+      "description": "Record of a digital item purchase",
+      "type": "object",
+      "properties": {
+        "buyerId": { "type": "string" },
+        "itemId": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "amount": { "type": "number" },
+        "platformFee": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["buyerId", "itemId", "sellerId", "amount", "createdAt"]
+    },
+    "MarketplaceItem": {
+      "title": "Marketplace Item",
+      "description": "Digital asset for sale by a creator",
+      "type": "object",
+      "properties": {
+        "sellerId": { "type": "string" },
+        "sellerName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "type": { "type": "string", "enum": ["caption_pack", "strategy", "preset"] },
+        "content": { "type": "string" },
+        "salesCount": { "type": "number" },
+        "rating": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sellerId", "title", "price", "type", "content", "createdAt"]
+    },
+    "VibeWrapped": {
+      "title": "Monthly Vibe Wrapped",
+      "description": "Aggregated monthly report for a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "month": { "type": "string" },
+        "scoreStart": { "type": "number" },
+        "scoreEnd": { "type": "number" },
+        "longestStreak": { "type": "number" },
+        "dominantMood": { "type": "string" },
+        "moodPercentage": { "type": "number" },
+        "mostResonantPostId": { "type": "string" },
+        "mostResonantPostCaption": { "type": "string" },
+        "aestheticDNA": { "type": "array", "items": { "type": "string" } },
+        "rankStart": { "type": "number" },
+        "rankEnd": { "type": "number" },
+        "totalPosts": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "month", "scoreStart", "scoreEnd", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}/wrapped/{wrappedId}": {
+      "schema": "VibeWrapped",
+      "description": "Monthly wrapped reports for a user"
+    },
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "stories/{storyId}": {
+      "schema": "Story",
+      "description": "Short-lived 24h stories"
+    },
+    "periodicStats/{statId}": {
+      "schema": "UserStat",
+      "description": "Top-level periodic competition stats for querying groups"
+    },
+    "users/{userId}/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User notifications"
+    },
+    "users/{userId}/following/{followedId}": {
+      "schema": "Follow",
+      "description": "Users this user is following"
+    },
+    "users/{userId}/followers/{followerId}": {
+      "schema": "Follow",
+      "description": "Users following this user"
+    },
+    "friends/{friendId}": {
+      "schema": "Friend",
+      "description": "Mutual friendships"
+    },
+    "posts/{postId}": {
+      "schema": "Post",
+      "description": "Global feed posts"
+    },
+    "posts/{postId}/comments/{commentId}": {
+      "schema": "Comment",
+      "description": "Comments on a specific post"
+    },
+    "posts/{postId}/likes/{likeId}": {
+      "schema": "Like",
+      "description": "Likes on a specific post"
+    },
+    "posts/{postId}/dislikes/{dislikeId}": {
+      "schema": "Dislike",
+      "description": "Dislikes on a specific post"
+    },
+    "rooms/{roomId}": {
+      "schema": "Room",
+      "description": "Mood-based drop-in spaces"
+    },
+    "rooms/{roomId}/messages/{messageId}": {
+      "schema": "RoomMessage",
+      "description": "Messages within a room"
+    },
+    "battles/{battleId}": {
+      "schema": "Battle",
+      "description": "Active or finished vibe duels"
+    },
+    "predictions/{predictionId}": {
+      "schema": "Prediction",
+      "description": "User viral trend predictions"
+    },
+    "conversations/{convId}": {
+      "schema": "Conversation",
+      "description": "Private DM channels"
+    },
+    "conversations/{convId}/messages/{msgId}": {
+      "schema": "Message",
+      "description": "Individual messages in a DM channel"
+    }
+  }
+}

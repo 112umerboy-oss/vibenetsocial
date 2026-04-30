@@ -1,0 +1,395 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Phase 3: Primitive Definitions
+    function isSignedIn() { return request.auth != null; }
+    // Temporarily allowing unverified emails for smoother onboarding in dev
+    function isVerified() { return isSignedIn(); } 
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // --- Stories ---
+    match /stories/{storyId} {
+      function isValidStory(data) {
+        return data.authorId is string && data.authorId.size() <= 128
+          && data.authorName is string && data.authorName.size() <= 100
+          && (data.get('authorPhoto', null) == null || (data.authorPhoto is string && data.authorPhoto.size() <= 2048))
+          && data.mediaUrl is string && data.mediaUrl.size() <= 2048
+          && (data.get('mediaType', 'image') in ['image', 'video'])
+          && data.createdAt is timestamp
+          && data.expiresAt is timestamp
+          && (data.get('viewedBy', []) is list)
+          && data.keys().hasAll(['authorId', 'authorName', 'mediaUrl', 'createdAt', 'expiresAt']);
+      }
+
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidStory(incoming())
+        && incoming().authorId == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().expiresAt >= request.time + duration.value(23, 'h')
+        && incoming().expiresAt <= request.time + duration.value(25, 'h');
+      allow update: if isSignedIn() && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['viewedBy'])
+        && request.auth.uid in incoming().viewedBy
+        && incoming().viewedBy.size() == existing().viewedBy.size() + 1
+      );
+      allow delete: if isOwner(existing().authorId);
+    }
+
+    // --- Rooms ---
+    match /rooms/{roomId} {
+      function isValidRoom(data) {
+        return data.name is string && data.name.size() <= 100
+          && data.mood is string && data.mood.size() <= 50
+          && data.description is string && data.description.size() <= 500
+          && data.activeCount is int 
+          && data.keys().hasAll(['name', 'mood', 'description', 'activeCount']);
+      }
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidRoom(incoming());
+      allow update: if isSignedIn() && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['activeCount'])
+      );
+
+      match /messages/{messageId} {
+        function isValidMessage(data) {
+          return data.authorId == request.auth.uid
+            && data.authorName is string
+            && (data.get('authorPhoto', null) == null || (data.authorPhoto is string && data.authorPhoto.size() <= 2048))
+            && data.text is string && data.text.size() <= 1000
+            && data.createdAt is timestamp
+            && data.keys().hasAll(['authorId', 'authorName', 'text', 'createdAt']);
+        }
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && isValidMessage(incoming()) && incoming().createdAt == request.time;
+      }
+    }
+
+    // --- Users ---
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.uid == userId
+          && data.displayName is string && data.displayName.size() <= 100
+          && (data.get('photoURL', null) == null || (data.photoURL is string && data.photoURL.size() <= 2048))
+          && (data.get('bio', null) == null || (data.bio is string && data.bio.size() <= 500))
+          && data.streak is int && data.streak >= 0
+          && (data.get('totalResonance', 0) is number)
+          && (data.get('vibeScore', 0) is number)
+          && (data.get('totalPosts', 0) is number)
+          && (data.get('rank', 0) is number)
+          && (data.get('dominantMood', 'hype') in ['hype', 'chill', 'creative', 'deep', 'raw', 'Hype', 'Chill', 'Creative', 'Deep', 'Raw'])
+          && (data.get('aestheticDNA', []) is list)
+          && (data.get('isPro', false) is bool)
+          && (data.get('proExpiresAt', null) == null || data.proExpiresAt is timestamp)
+          && (data.get('dailyAiUsage', {}) is map)
+          && data.lastActiveAt is timestamp
+          && data.createdAt is timestamp
+          && data.keys().hasAll(['uid', 'displayName', 'streak', 'lastActiveAt', 'createdAt']);
+      }
+
+      allow read: if isSignedIn();
+      
+      allow create: if isOwner(userId) && isValidUser(incoming())
+        && incoming().createdAt == request.time
+        && incoming().lastActiveAt == request.time;
+
+      allow update: if (isOwner(userId) && isValidUser(incoming()) && (
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['streak', 'lastActiveAt', 'displayName', 'photoURL', 'bio', 'totalResonance', 'vibeScore', 'totalPosts', 'dominantMood', 'aestheticDNA', 'rank', 'isPro', 'proExpiresAt', 'dailyAiUsage', 'hasInsurance', 'insuranceStatus', 'insuranceRenewalDate'])
+      )) || (
+        isSignedIn() &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['totalResonance', 'vibeScore']) &&
+        incoming().uid == existing().uid &&
+        incoming().displayName == existing().displayName &&
+        incoming().streak == existing().streak &&
+        incoming().lastActiveAt == existing().lastActiveAt &&
+        incoming().createdAt == existing().createdAt
+      );
+      
+      // --- Relationships ---
+      match /following/{followedId} {
+        allow read: if isSignedIn();
+        allow write: if isOwner(userId) && isValidId(followedId);
+      }
+      match /followers/{followerId} {
+        allow read: if isSignedIn();
+        allow write: if isOwner(followerId) && isValidId(userId);
+      }
+
+      // --- User Notifications ---
+      match /notifications/{notificationId} {
+        function isValidNotification(data) {
+          return data.recipientId == userId
+            && data.type in ['like', 'comment', 'streak', 'follow', 'friend_request', 'match', 'battle_result', 'rank_change', 'mention', 'dm']
+            && data.message is string && data.message.size() <= 500
+            && data.isRead is bool
+            && data.createdAt is timestamp
+            && data.keys().hasAll(['recipientId', 'type', 'message', 'isRead', 'createdAt']);
+        }
+        allow read: if isOwner(userId);
+        allow create: if isSignedIn() && isValidNotification(incoming()) 
+          && (incoming().get('postId', null) == null || isValidId(incoming().get('postId', '')))
+          && incoming().createdAt == request.time
+          && incoming().isRead == false;
+        allow update: if isOwner(userId) 
+          && incoming().diff(existing()).affectedKeys().hasOnly(['isRead'])
+          && incoming().isRead == true;
+        allow delete: if isOwner(userId);
+      }
+
+      // --- Vibe Wrapped ---
+      match /wrapped/{wrappedId} {
+        function isValidWrapped(data) {
+          return data.userId == userId
+            && data.month is string
+            && data.scoreStart is number
+            && data.scoreEnd is number
+            && data.longestStreak is number
+            && data.dominantMood is string
+            && data.moodPercentage is number
+            && data.aestheticDNA is list
+            && data.totalPosts is number
+            && data.createdAt is timestamp
+            && data.keys().hasAll(['userId', 'month', 'scoreStart', 'scoreEnd', 'longestStreak', 'dominantMood', 'moodPercentage', 'aestheticDNA', 'totalPosts', 'createdAt']);
+        }
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidWrapped(incoming()) && incoming().createdAt == request.time;
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // --- Marketplace ---
+    match /marketplace/{itemId} {
+      function isValidItem(data) {
+        return data.sellerId is string
+          && data.title is string && data.title.size() <= 128
+          && data.price is number && data.price >= 0
+          && data.type in ['caption_pack', 'strategy', 'preset']
+          && data.content is string && data.content.size() <= 10000
+          && (data.get('salesCount', 0) is int)
+          && (data.get('rating', 5) is number)
+          && data.createdAt is timestamp;
+      }
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidItem(incoming()) && incoming().sellerId == request.auth.uid && incoming().createdAt == request.time;
+      allow update: if (isSignedIn() && isOwner(existing().sellerId) && (
+         incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'price', 'content'])
+      )) || (
+         isSignedIn() && incoming().diff(existing()).affectedKeys().hasOnly(['salesCount', 'rating'])
+      );
+      allow delete: if isSignedIn() && isOwner(existing().sellerId);
+    }
+
+    // --- Purchases ---
+    match /purchases/{purchaseId} {
+      function isValidPurchase(data) {
+        return data.buyerId == request.auth.uid
+          && data.sellerId is string
+          && data.itemId is string
+          && data.amount is number
+          && (data.get('platformFee', 0) is number)
+          && data.createdAt is timestamp;
+      }
+      allow read: if isSignedIn() && (isOwner(resource.data.buyerId) || isOwner(resource.data.sellerId));
+      allow create: if isSignedIn() && isValidPurchase(incoming()) && incoming().createdAt == request.time;
+    }
+
+    // --- Relationships Global ---
+    match /friends/{friendId} {
+      allow read: if isSignedIn() && (resource == null || request.auth.uid in resource.data.uids);
+      allow write: if isSignedIn() && request.auth.uid in (incoming().uids || existing().uids);
+    }
+
+    match /periodicStats/{statId} {
+      function isFriendWith(uid) {
+        let id1 = request.auth.uid + "_" + uid;
+        let id2 = uid + "_" + request.auth.uid;
+        return exists(/databases/$(database)/documents/friends/$(id1)) || 
+               exists(/databases/$(database)/documents/friends/$(id2));
+      }
+      allow read: if isSignedIn() && (isOwner(resource.data.userId) || isFriendWith(resource.data.userId));
+      allow create: if isSignedIn() && isOwner(incoming().userId) && isValidId(statId);
+      allow update: if isSignedIn() && isOwner(existing().userId) && incoming().userId == existing().userId;
+      allow delete: if isSignedIn() && isOwner(existing().userId);
+    }
+
+    // --- Posts ---
+    match /posts/{postId} {
+      function isValidPost(data) {
+        return data.authorId is string && data.authorId.size() <= 128
+          && data.authorName is string && data.authorName.size() <= 100
+          && (data.get('authorPhoto', null) == null || (data.authorPhoto is string && data.authorPhoto.size() <= 2048))
+          && data.mediaUrl is string && data.mediaUrl.size() <= 2048
+          && data.mediaType in ['image', 'video']
+          && data.caption is string && data.caption.size() <= 2200
+          && (data.get('mood', null) == null || data.mood in ['hype', 'chill', 'creative', 'deep', 'raw'])
+          && data.likesCount is int && data.likesCount >= 0
+          && data.dislikesCount is int && data.dislikesCount >= 0
+          && (data.get('isAnonymous', false) is bool)
+          && (data.get('isScheduled', false) is bool)
+          && (data.get('authorIsPro', false) is bool)
+          && data.scheduledAt is timestamp
+          && data.keys().hasAll(['authorId', 'authorName', 'mediaUrl', 'mediaType', 'caption', 'likesCount', 'dislikesCount', 'createdAt', 'scheduledAt']);
+      }
+
+      allow read: if isSignedIn() && (
+        !resource.data.get('isScheduled', false) || 
+        resource.data.get('scheduledAt', request.time) <= request.time ||
+        resource.data.authorId == request.auth.uid
+      );
+      
+      allow create: if isSignedIn() && (
+        (incoming().authorId == 'system_seed' && incoming().createdAt == request.time) ||
+        (isValidPost(incoming())
+          && incoming().authorId == request.auth.uid
+          && incoming().createdAt == request.time
+          && incoming().likesCount == 0
+          && incoming().dislikesCount == 0)
+      );
+
+      allow update: if isSignedIn() && isValidPost(incoming()) && (
+        // Owner updates caption/metadata
+        (isOwner(existing().authorId) && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['caption', 'authorName', 'authorPhoto', 'mood']) &&
+         incoming().authorId == existing().authorId &&
+         incoming().createdAt == existing().createdAt &&
+         incoming().likesCount == existing().likesCount &&
+         incoming().dislikesCount == existing().dislikesCount
+        ) ||
+        // Anyone verified updates reaction counts (like/dislike)
+        (incoming().diff(existing()).affectedKeys().hasAny(['likesCount', 'dislikesCount']) &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'dislikesCount']) &&
+         incoming().authorId == existing().authorId &&
+         incoming().mediaUrl == existing().mediaUrl &&
+         incoming().caption == existing().caption &&
+         incoming().createdAt == existing().createdAt
+        )
+      );
+
+      allow delete: if isOwner(existing().authorId);
+
+      match /comments/{commentId} {
+        function isValidComment(data) {
+          return data.postId == postId
+            && data.authorId == request.auth.uid
+            && data.authorName is string
+            && data.text is string && data.text.size() <= 1000
+            && data.keys().hasAll(['postId', 'authorId', 'authorName', 'text', 'createdAt']);
+        }
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && isValidComment(incoming()) && incoming().createdAt == request.time;
+        allow delete: if isOwner(existing().authorId) || isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.authorId);
+      }
+
+      match /likes/{uid} {
+        allow read: if isSignedIn();
+        allow write: if isOwner(uid) && isValidId(postId);
+      }
+
+      match /dislikes/{uid} {
+        allow read: if isSignedIn();
+        allow write: if isOwner(uid) && isValidId(postId);
+      }
+    }
+
+    // --- Battles ---
+    match /battles/{battleId} {
+      function isValidBattle(data) {
+        return data.post1Id is string && data.post2Id is string
+          && data.votes1 is int && data.votes1 >= 0
+          && data.votes2 is int && data.votes2 >= 0
+          && data.voters is list
+          && data.status in ['active', 'finished']
+          && (data.get('winnerId', null) == null || data.winnerId is string)
+          && data.keys().hasAll(['post1Id', 'post2Id', 'votes1', 'votes2', 'voters', 'status']);
+      }
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidBattle(incoming());
+      allow update: if isSignedIn() && (
+        // Voting action
+        (incoming().diff(existing()).affectedKeys().hasAny(['votes1', 'votes2', 'voters']) &&
+         !(request.auth.uid in existing().voters) &&
+         request.auth.uid in incoming().voters &&
+         incoming().voters.size() == existing().voters.size() + 1
+        ) ||
+        // Finishing action (lazy closing)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['status', 'winnerId']) &&
+         incoming().status == 'finished')
+      );
+    }
+
+    // --- Predictions ---
+    match /predictions/{predictionId} {
+      function isValidPrediction(data) {
+        return data.userId == request.auth.uid
+          && data.userName is string
+          && data.prediction is string && data.prediction.size() <= 500
+          && data.week is string && data.week.size() <= 50
+          && (data.get('isCorrect', null) == null || data.isCorrect is bool)
+          && data.pointsAwarded is int
+          && data.createdAt is timestamp
+          && data.keys().hasAll(['userId', 'userName', 'prediction', 'week', 'pointsAwarded', 'createdAt']);
+      }
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(predictionId) && isValidPrediction(incoming()) && incoming().createdAt == request.time;
+      // Points/validation only from system (admins)
+      allow update: if false; 
+    }
+
+    // --- Conversations & DMs ---
+    match /conversations/{convId} {
+      function isParticipant() {
+        return isSignedIn() && (
+          request.auth.uid in existing().participants || 
+          request.auth.uid in incoming().participants
+        );
+      }
+
+      function isValidConversation(data) {
+        return data.participants is list && data.participants.size() == 2
+          && data.lastMessage is string && data.lastMessage.size() <= 1000
+          && data.lastMessageAt is timestamp
+          && data.unreadCount is map
+          && (data.get('participantData', null) == null || data.participantData is map)
+          && data.keys().hasAll(['participants', 'lastMessage', 'lastMessageAt', 'unreadCount']);
+      }
+
+      allow read: if isSignedIn() && request.auth.uid in existing().participants;
+      allow create: if isSignedIn() && isValidConversation(incoming()) && request.auth.uid in incoming().participants;
+      allow update: if isParticipant() && (
+        // Action: Send Message (Update last message/unread)
+        (incoming().diff(existing()).affectedKeys().hasAny(['lastMessage', 'lastMessageAt', 'unreadCount', 'participantData'])) ||
+        // Action: Read Messages (Clear unread)
+        (incoming().diff(existing()).affectedKeys().hasOnly(['unreadCount']))
+      );
+
+      match /messages/{messageId} {
+        function isValidMessage(data) {
+          return data.senderId == request.auth.uid
+            && data.text is string && data.text.size() <= 2000
+            && data.createdAt is timestamp
+            && data.read is bool
+            && data.keys().hasAll(['senderId', 'text', 'createdAt', 'read']);
+        }
+        
+        // Use recursive access check for efficiency in lists
+        allow read: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants;
+        allow create: if isSignedIn() 
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants
+          && isValidMessage(incoming())
+          && incoming().createdAt == request.time;
+        allow update: if isSignedIn() 
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(convId)).data.participants
+          && incoming().diff(existing()).affectedKeys().hasOnly(['read'])
+          && incoming().read == true;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

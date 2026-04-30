@@ -1,0 +1,119 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitive Definitions
+    function isSignedIn() { return request.auth != null; }
+    function isVerified() { return isSignedIn() && request.auth.token.email_verified == true; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    // --- Users ---
+    match /users/{userId} {
+      // Logic for User Entity
+      function isValidUser(data) {
+        return data.uid == userId
+          && data.displayName is string && data.displayName.size() <= 100
+          && (data.get('photoURL', null) == null || (data.photoURL is string && data.photoURL.size() <= 2048))
+          && (data.get('bio', null) == null || (data.bio is string && data.bio.size() <= 500))
+          && data.streak is int && data.streak >= 0
+          && data.keys().hasAll(['uid', 'displayName', 'streak', 'lastActiveAt', 'createdAt']);
+      }
+
+      allow read: if isSignedIn();
+      
+      allow create: if isOwner(userId) && isVerified() && isValidUser(incoming())
+        && incoming().createdAt == request.time
+        && incoming().lastActiveAt == request.time
+        && incoming().keys().size() <= 7;
+
+      allow update: if isOwner(userId) && isVerified() && isValidUser(incoming()) && (
+        // Action: Profile Update
+        (incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'bio']) && (
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().streak == existing().streak
+        )) ||
+        // Action: Heartbeat / Streak Update
+        (incoming().diff(existing()).affectedKeys().hasOnly(['streak', 'lastActiveAt']) && (
+          incoming().uid == existing().uid &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().lastActiveAt == request.time
+        ))
+      );
+    }
+
+    // --- Posts ---
+    match /posts/{postId} {
+      function isValidPost(data) {
+        return data.authorId == request.auth.uid
+          && data.authorName is string && data.authorName.size() <= 100
+          && (data.get('authorPhoto', null) == null || (data.authorPhoto is string && data.authorPhoto.size() <= 2048))
+          && data.mediaUrl is string && data.mediaUrl.size() <= 2048
+          && data.mediaType in ['image', 'video']
+          && data.caption is string && data.caption.size() <= 2200
+          && data.likesCount is int && data.likesCount >= 0
+          && data.dislikesCount is int && data.dislikesCount >= 0
+          && data.keys().hasAll(['authorId', 'authorName', 'mediaUrl', 'mediaType', 'caption', 'likesCount', 'dislikesCount', 'createdAt']);
+      }
+
+      allow read: if isSignedIn();
+      allow create: if isVerified() && isValidPost(incoming())
+        && incoming().createdAt == request.time
+        && incoming().likesCount == 0
+        && incoming().dislikesCount == 0
+        && incoming().keys().size() <= 9; // + maybe optional authorPhoto
+
+      allow update: if isVerified() && (
+        // Action: Post Edit (Owner only)
+        (isOwner(existing().authorId) && isValidPost(incoming()) && 
+         incoming().diff(existing()).affectedKeys().hasOnly(['caption', 'authorName', 'authorPhoto']) &&
+         incoming().createdAt == existing().createdAt &&
+         incoming().likesCount == existing().likesCount &&
+         incoming().dislikesCount == existing().dislikesCount
+        ) ||
+        // Action: Reaction Sync (Anyone verified)
+        (incoming().diff(existing()).affectedKeys().hasAny(['likesCount', 'dislikesCount']) &&
+         incoming().diff(existing()).affectedKeys().hasOnly(['likesCount', 'dislikesCount']) &&
+         incoming().authorId == existing().authorId &&
+         incoming().mediaUrl == existing().mediaUrl &&
+         incoming().caption == existing().caption
+        )
+      );
+      
+      allow delete: if isOwner(existing().authorId);
+
+      // Comments
+      match /comments/{commentId} {
+        function isValidComment(data) {
+          return data.postId == postId
+            && data.authorId == request.auth.uid
+            && data.authorName is string
+            && data.text is string && data.text.size() <= 1000
+            && data.keys().hasAll(['postId', 'authorId', 'authorName', 'text', 'createdAt']);
+        }
+        allow read: if isSignedIn();
+        allow create: if isVerified() && isValidComment(incoming()) && incoming().createdAt == request.time;
+        allow delete: if isOwner(existing().authorId) || isOwner(get(/databases/$(database)/documents/posts/$(postId)).data.authorId);
+      }
+
+      // Likes subcollection (Legacy - moved to document-based check)
+      match /likes/{uid} {
+        allow read: if isSignedIn();
+        allow write: if isOwner(uid) && isValidId(postId);
+      }
+
+      // Dislikes subcollection
+      match /dislikes/{uid} {
+        allow read: if isSignedIn();
+        allow write: if isOwner(uid) && isValidId(postId);
+      }
+    }
+  }
+}
